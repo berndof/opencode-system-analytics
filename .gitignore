@@ -8,3 +8,4 @@ env/
 *.db
 *.sqlite3
 .analytics_server.pid
+server.log

@@ -307,7 +307,7 @@
         </div>
 
         <!-- TABLES GRID -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 gap-6">
             
             <!-- Plans Table -->
             <div class="glass-card p-6 rounded-2xl transition-all duration-300 space-y-4">
@@ -340,7 +340,7 @@
                     <table class="w-full text-left text-sm text-slate-300">
                         <thead class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-white/10 font-medium">
                             <tr>
-                                <th class="p-3.5">Plan File</th>
+                                <th class="p-3.5 min-w-[200px]">Plan File</th>
                                 <th class="p-3.5">Date</th>
                                 <th class="p-3.5">Progress</th>
                                 <th class="p-3.5">Tasks</th>
@@ -787,7 +787,7 @@
 
                 return `
                     <tr class="hover:bg-slate-800/40 transition">
-                        <td class="p-3.5 font-medium text-white break-all flex items-center gap-2">
+                        <td class="p-3.5 font-medium text-white break-words min-w-[200px] flex items-center gap-2" title="${p.filename.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
                             <i data-lucide="file-text" class="w-4 h-4 text-slate-400 shrink-0"></i>
                             ${p.filename}
                         </td>
