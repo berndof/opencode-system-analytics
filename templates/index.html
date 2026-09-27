@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenCode System Analytics</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0b0f19',
+                        cardbg: '#111827',
+                        cardborder: '#1f2937',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0b0f19; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .glow-card { box-shadow: 0 0 15px rgba(59, 130, 246, 0.08); border: 1px solid #1f2937; }
+        .glow-card:hover { border-color: #3b82f6; box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- HEADER -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-cardbg p-6 rounded-2xl glow-card">
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold tracking-tight text-white">OpenCode System Analytics</h1>
+                        <p class="text-sm text-gray-400">System Telemetry, Agent Efficiency, Cost & Multi-Project Analytics</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTERS & CONTROLS -->
+            <div class="flex flex-wrap items-center gap-3">
+                <select id="projectFilter" onchange="applyFilters()" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="ALL">All Workspaces</option>
+                </select>
+                <select id="modelFilter" onchange="applyFilters()" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="ALL">All Models</option>
+                </select>
+                
+                <button onclick="exportData('json')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-700 transition">JSON</button>
+                <button onclick="exportData('csv')" class="bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-700 transition">CSV</button>
+
+                <div class="flex items-center gap-2 bg-gray-800/60 px-3 py-1.5 rounded-lg text-sm text-gray-300">
+                    <input type="checkbox" id="autoRefresh" class="accent-blue-500 rounded cursor-pointer" checked>
+                    <label for="autoRefresh" class="cursor-pointer select-none">Auto-refresh (10s)</label>
+                </div>
+                <button id="refreshBtn" onclick="fetchData()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-xl transition duration-200">
+                    <svg id="refreshSpinner" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- KPI CARDS GRID -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            
+            <!-- Card 1: Total Sessions -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="text-xs font-medium text-gray-400 uppercase tracking-wider">Sessions</div>
+                <div class="text-3xl font-extrabold text-white" id="kpiTotalSessions">-</div>
+                <p class="text-xs text-gray-400" id="kpiSessionsDetail">Total recorded</p>
+            </div>
+
+            <!-- Card 2: Delegations -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="text-xs font-medium text-gray-400 uppercase tracking-wider">Delegations</div>
+                <div class="text-3xl font-extrabold text-white" id="kpiTotalDelegations">-</div>
+                <p class="text-xs text-gray-400">Subagent calls</p>
+            </div>
+
+            <!-- Card 3: Tokens -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="text-xs font-medium text-gray-400 uppercase tracking-wider">Tokens</div>
+                <div class="text-3xl font-extrabold text-white" id="kpiTotalTokens">-</div>
+                <p class="text-xs text-gray-400">Input/Output/Cache</p>
+            </div>
+
+            <!-- Card 4: Cost -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="text-xs font-medium text-gray-400 uppercase tracking-wider">Est. Cost</div>
+                <div class="text-3xl font-extrabold text-emerald-400" id="kpiTotalCost">$0.00</div>
+                <p class="text-xs text-gray-400">USD estimated</p>
+            </div>
+
+            <!-- Card 5: IER -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="flex justify-between items-center text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <span>IER</span>
+                    <span id="ierBadge" class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-800 text-gray-300">Calculated</span>
+                </div>
+                <div class="text-3xl font-extrabold text-white" id="kpiIER">-</div>
+                <p class="text-xs text-gray-400">Ideation/Execution</p>
+            </div>
+
+            <!-- Card 6: PCR -->
+            <div class="bg-cardbg p-5 rounded-2xl glow-card space-y-2">
+                <div class="text-xs font-medium text-gray-400 uppercase tracking-wider">PCR</div>
+                <div class="text-3xl font-extrabold text-white" id="kpiPCR">-</div>
+                <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                    <div id="pcrProgressBar" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- NEW PER-AGENT DRILLDOWN TABLE -->
+        <div class="bg-cardbg p-6 rounded-2xl glow-card space-y-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-200">Per-Agent Performance & Health Breakdown</h3>
+                    <p class="text-xs text-gray-400">Click any row to filter detail panels below</p>
+                </div>
+                <span id="agentCountBadge" class="bg-blue-900/50 text-blue-300 text-xs font-semibold px-2.5 py-1 rounded-full">0 Agents</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-gray-300">
+                    <thead class="text-xs uppercase bg-gray-800/60 text-gray-400 border-b border-gray-700">
+                        <tr>
+                            <th class="p-3">Agent</th>
+                            <th class="p-3">Calls</th>
+                            <th class="p-3">Share %</th>
+                            <th class="p-3">Avg Steps</th>
+                            <th class="p-3">P95 Steps</th>
+                            <th class="p-3">Breach %</th>
+                            <th class="p-3">Err %</th>
+                            <th class="p-3">Tokens Total</th>
+                            <th class="p-3">Avg Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentDrilldownBody" class="divide-y divide-gray-800 cursor-pointer">
+                        <tr><td colspan="9" class="p-4 text-center text-gray-500">Loading agent metrics...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CHARTS GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Chart 1: Doughnut Subagent Share -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card flex flex-col justify-between">
+                <h3 class="text-base font-semibold text-gray-200 mb-4">Subagent Call Share</h3>
+                <div class="relative h-64">
+                    <canvas id="subagentChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Bar Chart Tokens per Agent -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card flex flex-col justify-between">
+                <h3 class="text-base font-semibold text-gray-200 mb-4">Token Consumption & Cost by Agent</h3>
+                <div class="relative h-64">
+                    <canvas id="tokensCostChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Time Series Daily Activity -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card flex flex-col justify-between">
+                <h3 class="text-base font-semibold text-gray-200 mb-4">Daily Activity & Token Trends</h3>
+                <div class="relative h-64">
+                    <canvas id="timeSeriesChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Radar Chart Agent Health -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card flex flex-col justify-between">
+                <h3 class="text-base font-semibold text-gray-200 mb-4">Agent Error Matrix</h3>
+                <div class="relative h-64">
+                    <canvas id="agentRadarChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- TABLES GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Plans Table -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-200">Active & Historical Plans</h3>
+                    <span id="planCountBadge" class="bg-blue-900/50 text-blue-300 text-xs font-semibold px-2.5 py-1 rounded-full">0 Plans</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-gray-300">
+                        <thead class="text-xs uppercase bg-gray-800/60 text-gray-400">
+                            <tr>
+                                <th class="p-3 rounded-l-lg">Plan File</th>
+                                <th class="p-3">Progress</th>
+                                <th class="p-3">Tasks</th>
+                                <th class="p-3 rounded-r-lg">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plansTableBody" class="divide-y divide-gray-800">
+                            <tr><td colspan="4" class="p-4 text-center text-gray-500">Loading plans...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Sessions Table -->
+            <div class="bg-cardbg p-6 rounded-2xl glow-card space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-200">Recent Delegations & Sessions</h3>
+                    <span id="sessionCountBadge" class="bg-purple-900/50 text-purple-300 text-xs font-semibold px-2.5 py-1 rounded-full">0 Sessions</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-gray-300">
+                        <thead class="text-xs uppercase bg-gray-800/60 text-gray-400">
+                            <tr>
+                                <th class="p-3 rounded-l-lg">Agent</th>
+                                <th class="p-3">Title / ID</th>
+                                <th class="p-3">Steps</th>
+                                <th class="p-3 rounded-r-lg">Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionsTableBody" class="divide-y divide-gray-800">
+                            <tr><td colspan="4" class="p-4 text-center text-gray-500">Loading sessions...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- SCRIPT FOR FETCH & CHARTS -->
+    <script>
+        let rawMetrics = null;
+        let rawPlans = [];
+        let rawSessions = [];
+        let selectedAgentFilter = null;
+
+        let subagentChartInst = null;
+        let tokensCostChartInst = null;
+        let timeSeriesChartInst = null;
+        let agentRadarChartInst = null;
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+            return num.toString();
+        }
+
+        async function fetchData() {
+            const spinner = document.getElementById('refreshSpinner');
+            spinner.classList.add('animate-spin');
+
+            try {
+                const [metricsRes, plansRes, sessionsRes] = await Promise.all([
+                    fetch('/api/metrics'),
+                    fetch('/api/plans'),
+                    fetch('/api/sessions')
+                ]);
+
+                rawMetrics = await metricsRes.json();
+                rawPlans = await plansRes.json();
+                rawSessions = await sessionsRes.json();
+
+                populateFilterDropdowns();
+                renderAll();
+            } catch (err) {
+                console.error("Error loading metrics:", err);
+            } finally {
+                spinner.classList.remove('animate-spin');
+            }
+        }
+
+        function populateFilterDropdowns() {
+            if (!rawMetrics) return;
+
+            const projSelect = document.getElementById('projectFilter');
+            const currProj = projSelect.value;
+            projSelect.innerHTML = '<option value="ALL">All Workspaces</option>';
+            Object.keys(rawMetrics.project_breakdown || {}).forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.innerText = p.length > 40 ? p.substring(0, 37) + '...' : p;
+                projSelect.appendChild(opt);
+            });
+            projSelect.value = currProj;
+
+            const modelSelect = document.getElementById('modelFilter');
+            const currModel = modelSelect.value;
+            modelSelect.innerHTML = '<option value="ALL">All Models</option>';
+            Object.keys(rawMetrics.model_breakdown || {}).forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = m;
+                modelSelect.appendChild(opt);
+            });
+            modelSelect.value = currModel;
+        }
+
+        function applyFilters() {
+            renderAll();
+        }
+
+        function filterSessions() {
+            const proj = document.getElementById('projectFilter').value;
+            const model = document.getElementById('modelFilter').value;
+
+            return rawSessions.filter(s => {
+                if (proj !== 'ALL' && (s.project || 'default') !== proj) return false;
+                if (model !== 'ALL' && (s.model || 'unknown') !== model) return false;
+                if (selectedAgentFilter && (s.agent || 'unknown').toLowerCase() !== selectedAgentFilter.toLowerCase()) return false;
+                return true;
+            });
+        }
+
+        function renderAll() {
+            if (!rawMetrics) return;
+            const filteredSessions = filterSessions();
+
+            updateKPIs(rawMetrics, filteredSessions);
+            updateAgentDrilldownTable(rawMetrics);
+            updateCharts(rawMetrics);
+            updatePlansTable(rawPlans);
+            updateSessionsTable(filteredSessions);
+        }
+
+        function updateKPIs(m, filteredSessions) {
+            const totalSessions = filteredSessions.length;
+            document.getElementById('kpiTotalSessions').innerText = totalSessions;
+            
+            const totalCalls = filteredSessions.length;
+            document.getElementById('kpiTotalDelegations').innerText = totalCalls;
+
+            const totalTokens = filteredSessions.reduce((acc, s) => acc + s.tokens_input + s.tokens_output + s.tokens_reasoning + s.tokens_cache_read + s.tokens_cache_write, 0);
+            document.getElementById('kpiTotalTokens').innerText = formatNumber(totalTokens);
+
+            const totalCost = filteredSessions.reduce((acc, s) => acc + s.cost, 0);
+            document.getElementById('kpiTotalCost').innerText = '$' + totalCost.toFixed(4);
+
+            const ier = m.ideation_vs_execution_ratio.toFixed(2);
+            document.getElementById('kpiIER').innerText = ier;
+
+            const badge = document.getElementById('ierBadge');
+            if (m.ideation_vs_execution_ratio > 2.0) {
+                badge.innerText = 'High Ideation';
+                badge.className = 'px-1.5 py-0.5 text-[10px] font-semibold rounded bg-red-900/60 text-red-300 border border-red-700';
+            } else if (m.ideation_vs_execution_ratio < 0.5) {
+                badge.innerText = 'Exec Focused';
+                badge.className = 'px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-900/60 text-blue-300 border border-blue-700';
+            } else {
+                badge.innerText = 'Balanced';
+                badge.className = 'px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700';
+            }
+
+            const pcr = m.plan_completion_rate.toFixed(1) + '%';
+            document.getElementById('kpiPCR').innerText = pcr;
+            document.getElementById('pcrProgressBar').style.width = m.plan_completion_rate + '%';
+        }
+
+        function updateAgentDrilldownTable(m) {
+            const agents = Object.values(m.agent_distribution || {});
+            document.getElementById('agentCountBadge').innerText = agents.length + ' Agents';
+            const tbody = document.getElementById('agentDrilldownBody');
+
+            if (!agents || agents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">No agent metrics available</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = agents.sort((a,b) => b.tokens_total - a.tokens_total).map(a => {
+                const isSelected = selectedAgentFilter === a.agent;
+                const rowBg = isSelected ? 'bg-blue-900/40 border-blue-500' : 'hover:bg-gray-800/40';
+                const breachColor = a.breach_rate > 0 ? 'text-amber-400 font-semibold' : 'text-gray-400';
+                const errColor = a.error_rate > 10 ? 'text-red-400 font-semibold' : 'text-emerald-400';
+
+                return `
+                    <tr onclick="toggleAgentFilter('${a.agent}')" class="${rowBg} transition duration-150">
+                        <td class="p-3 font-semibold text-white">@${a.agent}</td>
+                        <td class="p-3 text-gray-300">${a.invocation_count}</td>
+                        <td class="p-3 text-gray-300">${a.share_pct}%</td>
+                        <td class="p-3 text-gray-300">${a.avg_steps}</td>
+                        <td class="p-3 text-gray-300">${a.p95_steps}</td>
+                        <td class="p-3 ${breachColor}">${a.breach_rate}% (${a.breach_count})</td>
+                        <td class="p-3 ${errColor}">${a.error_rate}%</td>
+                        <td class="p-3 font-mono text-gray-200">${formatNumber(a.tokens_total)}</td>
+                        <td class="p-3 font-mono text-emerald-400">$${a.avg_cost.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function toggleAgentFilter(agent) {
+            if (selectedAgentFilter === agent) {
+                selectedAgentFilter = null;
+            } else {
+                selectedAgentFilter = agent;
+            }
+            renderAll();
+        }
+
+        function updateCharts(m) {
+            const agentsList = Object.values(m.agent_distribution || {});
+            const agents = agentsList.map(a => a.agent);
+            const calls = agentsList.map(a => a.invocation_count);
+            const tokens = agentsList.map(a => a.tokens_total);
+            const errors = agentsList.map(a => a.error_rate);
+
+            const colorPalette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
+
+            // 1. Doughnut Chart
+            if (subagentChartInst) subagentChartInst.destroy();
+            const ctx1 = document.getElementById('subagentChart').getContext('2d');
+            subagentChartInst = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: agents.map(a => '@' + a),
+                    datasets: [{
+                        data: calls,
+                        backgroundColor: colorPalette.slice(0, agents.length),
+                        borderWidth: 2,
+                        borderColor: '#111827'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { color: '#9ca3af', font: { size: 12 } } } }
+                }
+            });
+
+            // 2. Bar Chart (Tokens per Agent)
+            if (tokensCostChartInst) tokensCostChartInst.destroy();
+            const ctx2 = document.getElementById('tokensCostChart').getContext('2d');
+            tokensCostChartInst = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: agents.map(a => '@' + a),
+                    datasets: [{ label: 'Tokens Total', data: tokens, backgroundColor: '#3b82f6', borderRadius: 6 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } },
+                        y: { ticks: { color: '#9ca3af', callback: v => formatNumber(v) }, grid: { color: '#1f2937' } }
+                    }
+                }
+            });
+
+            // 3. Time Series Chart
+            const daily = m.time_series_daily || [];
+            const dates = daily.map(d => d.time_key);
+            const dailyTokens = daily.map(d => d.tokens_total);
+            const dailySessions = daily.map(d => d.session_count);
+
+            if (timeSeriesChartInst) timeSeriesChartInst.destroy();
+            const ctx3 = document.getElementById('timeSeriesChart').getContext('2d');
+            timeSeriesChartInst = new Chart(ctx3, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: 'Tokens Consumed', data: dailyTokens, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Sessions', data: dailySessions, borderColor: '#10b981', yAxisID: 'y1', tension: 0.3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } },
+                        y: { ticks: { color: '#9ca3af', callback: v => formatNumber(v) }, grid: { color: '#1f2937' } },
+                        y1: { position: 'right', ticks: { color: '#10b981' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            // 4. Radar Chart
+            if (agentRadarChartInst) agentRadarChartInst.destroy();
+            const ctx4 = document.getElementById('agentRadarChart').getContext('2d');
+            agentRadarChartInst = new Chart(ctx4, {
+                type: 'radar',
+                data: {
+                    labels: agents.map(a => '@' + a),
+                    datasets: [{ label: 'Error Rate %', data: errors, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.2)' }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    scales: {
+                        r: {
+                            angleLines: { color: '#1f2937' },
+                            grid: { color: '#1f2937' },
+                            pointLabels: { color: '#9ca3af', font: { size: 11 } },
+                            ticks: { backdropColor: 'transparent', color: '#9ca3af' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePlansTable(plans) {
+            document.getElementById('planCountBadge').innerText = plans.length + ' Plans';
+            const tbody = document.getElementById('plansTableBody');
+
+            if (!plans || plans.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">No plan files found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = plans.map(p => {
+                const comp = p.completed_tasks;
+                const tot = p.total_tasks;
+                const rate = p.completion_rate.toFixed(0);
+                const isComplete = comp === tot && tot > 0;
+                
+                const statusBadge = isComplete
+                    ? '<span class="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">Completed</span>'
+                    : '<span class="px-2 py-0.5 text-xs font-semibold rounded bg-amber-900/60 text-amber-300 border border-amber-700">In Progress</span>';
+
+                return `
+                    <tr class="hover:bg-gray-800/40">
+                        <td class="p-3 font-medium text-white break-all">${p.filename}</td>
+                        <td class="p-3 w-32">
+                            <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                <div class="bg-blue-500 h-full" style="width: ${rate}%"></div>
+                            </div>
+                        </td>
+                        <td class="p-3 text-gray-300">${comp}/${tot} (${rate}%)</td>
+                        <td class="p-3">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateSessionsTable(sessions) {
+            document.getElementById('sessionCountBadge').innerText = sessions.length + ' Sessions';
+            const tbody = document.getElementById('sessionsTableBody');
+
+            if (!sessions || sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">No matching sessions recorded</td></tr>';
+                return;
+            }
+
+            const recent = sessions.slice(0, 10);
+            tbody.innerHTML = recent.map(s => {
+                const agent = '@' + (s.agent || 'unknown');
+                const title = s.title ? (s.title.length > 30 ? s.title.substring(0, 27) + '...' : s.title) : s.id.substring(0, 10);
+                return `
+                    <tr class="hover:bg-gray-800/40">
+                        <td class="p-3"><span class="px-2 py-0.5 text-xs font-semibold rounded bg-blue-900/50 text-blue-300 border border-blue-800">${agent}</span></td>
+                        <td class="p-3 text-gray-200" title="${s.title}">${title}</td>
+                        <td class="p-3 text-gray-300">${s.step_count} steps</td>
+                        <td class="p-3 text-emerald-400 font-mono text-xs">$${s.cost.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function exportData(type) {
+            if (!rawMetrics) return;
+
+            if (type === 'json') {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(rawMetrics, null, 2));
+                const dlAnchor = document.createElement('a');
+                dlAnchor.setAttribute("href", dataStr);
+                dlAnchor.setAttribute("download", `opencode_analytics_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(dlAnchor);
+                dlAnchor.click();
+                dlAnchor.remove();
+            } else if (type === 'csv') {
+                const agents = Object.values(rawMetrics.agent_distribution || {});
+                let csvContent = "data:text/csv;charset=utf-8,Agent,Calls,SharePct,AvgSteps,P95Steps,BreachCount,BreachPct,ErrorRatePct,TokensTotal,AvgCostUSD\n";
+                agents.forEach(a => {
+                    csvContent += `${a.agent},${a.invocation_count},${a.share_pct},${a.avg_steps},${a.p95_steps},${a.breach_count},${a.breach_rate},${a.error_rate},${a.tokens_total},${a.avg_cost}\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement('a');
+                link.setAttribute('href', encodedUri);
+                link.setAttribute('download', `opencode_agent_analytics_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
+        }
+
+        // Auto Refresh logic
+        setInterval(() => {
+            if (document.getElementById('autoRefresh').checked) {
+                fetchData();
+            }
+        }, 10000);
+
+        // Initial Load
+        fetchData();
+    </script>
+</body>
+</html>
