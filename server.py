@@ -9,19 +9,41 @@ import os
 import json
 import argparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # Ensure package directory is in sys.path when executed directly
 PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from orchestrator_analytics.config import HOST, PORT, APP_TITLE
+from orchestrator_analytics.config import HOST, PORT, APP_TITLE, PLANS_DIRS
 from orchestrator_analytics.collector import AnalyticsCollector
 from orchestrator_analytics.engine import AnalyticsEngine
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 INDEX_PATH = os.path.join(TEMPLATE_DIR, "index.html")
+
+def delete_plan_file(plan_path: str) -> tuple:
+    if not plan_path or not plan_path.lower().endswith('.md'):
+        return False, {"error": "forbidden"}, 403
+    
+    real = os.path.realpath(plan_path)
+    if not real.lower().endswith('.md'):
+        return False, {"error": "forbidden"}, 403
+        
+    allowed_dirs = {os.path.realpath(d) for d in PLANS_DIRS}
+    parent_dir = os.path.realpath(os.path.dirname(real))
+    if parent_dir not in allowed_dirs:
+        return False, {"error": "forbidden"}, 403
+        
+    if not os.path.exists(real):
+        return False, {"error": "not found"}, 404
+        
+    try:
+        os.remove(real)
+        return True, {"deleted": True, "path": real}, 200
+    except OSError as e:
+        return False, {"error": str(e)}, 500
 
 def get_html_content() -> str:
     if os.path.exists(INDEX_PATH):
@@ -96,6 +118,20 @@ class AnalyticsHTTPRequestHandler(BaseHTTPRequestHandler):
         else:
             self._send_json({"error": "Not Found", "path": path}, status=404)
 
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/plans":
+            query_params = parse_qs(parsed.query)
+            plan_path_list = query_params.get("path")
+            if not plan_path_list or not plan_path_list[0]:
+                self._send_json({"error": "missing path"}, status=400)
+                return
+            ok, payload, http_status = delete_plan_file(plan_path_list[0])
+            self._send_json(payload, status=http_status)
+        else:
+            self._send_json({"error": "Not Found", "path": path}, status=404)
+
 
 def run_fastapi_server(host: str, port: int):
     import fastapi
@@ -119,6 +155,11 @@ def run_fastapi_server(host: str, port: int):
     @app.get("/api/plans")
     async def api_plans():
         return JSONResponse(content=get_plans_data())
+
+    @app.delete("/api/plans")
+    async def api_delete_plan(path: str = fastapi.Query(...)):
+        ok, payload, http_status = delete_plan_file(path)
+        return JSONResponse(content=payload, status_code=http_status)
 
     @app.get("/api/sessions")
     async def api_sessions():
