@@ -24,6 +24,15 @@ def normalize_agent_name(raw_name: Optional[str]) -> str:
     return name or "unknown"
 
 
+# Tool names that represent handing work to another agent.
+DISPATCH_TOOLS = frozenset({
+    "task",
+    "subagent",
+    "invoke_subagent",
+    "mc_dispatch",
+})
+
+
 @dataclass
 class ToolCallRecord:
     call_id: str
@@ -83,6 +92,8 @@ class PlanRecord:
     completed_tasks: int
     pending_tasks: int
     completion_rate: float
+    workspace: Optional[str] = None
+    content: str = ""
     tasks: List[PlanTaskRecord] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -253,14 +264,23 @@ class AnalyticsCollector:
                     elif "command" in input_data:
                         input_summary = str(input_data["command"])[:100]
 
-                    raw_target = input_data.get("agent") or input_data.get("subagent") or input_data.get("target")
+                    # Dispatch targets are recorded under different keys depending on
+                    # the dispatcher: `task` uses `subagent_type`, `mc_dispatch` uses
+                    # `to`. Older/other frontends use `agent` / `subagent` / `target`.
+                    raw_target = (
+                        input_data.get("subagent_type")
+                        or input_data.get("to")
+                        or input_data.get("agent")
+                        or input_data.get("subagent")
+                        or input_data.get("target")
+                    )
                     if raw_target:
                         target_agent = normalize_agent_name(raw_target)
 
                 if tool_name in ("edit", "write", "apply_patch", "write_to_file", "replace_file_content"):
                     session.files_modified += 1
 
-                if tool_name in ("task", "mc_dispatch", "subagent", "invoke_subagent"):
+                if tool_name in DISPATCH_TOOLS:
                     if target_agent:
                         session.subagent_calls.append(target_agent)
 
@@ -276,17 +296,38 @@ class AnalyticsCollector:
                 )
                 session.tool_calls.append(tool_record)
 
-    def get_plans(self) -> List[PlanRecord]:
+    def get_plans(self, known_workspaces: Optional[List[str]] = None) -> List[PlanRecord]:
         plans: List[PlanRecord] = []
         date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
+        seen_paths = set()
 
+        search_dirs: List[tuple[str, Optional[str]]] = []
         for p_dir in self.plans_dirs:
+            search_dirs.append((p_dir, None))
+
+        if known_workspaces:
+            for ws in known_workspaces:
+                if ws and os.path.exists(ws):
+                    candidate_dirs = [
+                        os.path.join(ws, ".opencode", "plans"),
+                        os.path.join(ws, "docs", "plans"),
+                    ]
+                    for cd in candidate_dirs:
+                        if os.path.exists(cd):
+                            search_dirs.append((cd, ws))
+
+        for p_dir, ws_hint in search_dirs:
             if not os.path.exists(p_dir):
                 continue
 
             plan_files = glob.glob(os.path.join(p_dir, "*.md"))
 
             for file_path in plan_files:
+                real_p = os.path.realpath(file_path)
+                if real_p in seen_paths:
+                    continue
+                seen_paths.add(real_p)
+
                 filename = os.path.basename(file_path)
                 match = date_pattern.search(filename)
                 if match:
@@ -299,7 +340,7 @@ class AnalyticsCollector:
                     with open(file_path, "r", encoding="utf-8") as f:
                         content = f.read()
                 except Exception:
-                    continue
+                    content = ""
 
                 tasks: List[PlanTaskRecord] = []
                 for line in content.splitlines():
@@ -316,6 +357,13 @@ class AnalyticsCollector:
                 total_count = len(tasks)
                 completion_rate = (completed_count / total_count * 100.0) if total_count > 0 else 0.0
 
+                workspace = ws_hint
+                if not workspace and known_workspaces:
+                    for w in known_workspaces:
+                        if w and real_p.startswith(os.path.realpath(w)):
+                            workspace = w
+                            break
+
                 plans.append(
                     PlanRecord(
                         path=file_path,
@@ -325,11 +373,13 @@ class AnalyticsCollector:
                         completed_tasks=completed_count,
                         pending_tasks=pending_count,
                         completion_rate=completion_rate,
+                        workspace=workspace,
+                        content=content,
                         tasks=tasks,
                     )
                 )
 
-        plans.sort(key=lambda p: p.filename)
+        plans.sort(key=lambda p: (p.date_str or "", p.filename), reverse=True)
         return plans
 
     def collect_all(self) -> AnalyticsData:
@@ -342,7 +392,8 @@ class AnalyticsCollector:
             finally:
                 conn.close()
 
-        plans = self.get_plans()
+        known_workspaces = list({s.project for s in sessions_dict.values() if s.project and s.project != "default"})
+        plans = self.get_plans(known_workspaces=known_workspaces)
         sessions = list(sessions_dict.values())
         collected_at = datetime.utcnow().isoformat() + "Z"
 

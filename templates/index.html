@@ -31,6 +31,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Marked Markdown CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #090d16 60%, #030712 100%);
@@ -63,6 +65,19 @@
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
+        /* Custom Markdown Reader Styling */
+        .plan-prose h1 { font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-top: 1rem; margin-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.25rem; }
+        .plan-prose h2 { font-size: 1.25rem; font-weight: 600; color: #e2e8f0; margin-top: 1rem; margin-bottom: 0.5rem; }
+        .plan-prose h3 { font-size: 1.1rem; font-weight: 600; color: #cbd5e1; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+        .plan-prose p { margin-bottom: 0.75rem; line-height: 1.6; color: #94a3b8; }
+        .plan-prose ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; color: #cbd5e1; }
+        .plan-prose ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; color: #cbd5e1; }
+        .plan-prose li { margin-bottom: 0.25rem; }
+        .plan-prose code { background: rgba(0, 0, 0, 0.4); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.85em; color: #a5b4fc; }
+        .plan-prose pre { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 0.75rem; }
+        .plan-prose pre code { background: transparent; padding: 0; }
+        .plan-prose blockquote { border-left: 3px solid #6366f1; padding-left: 0.75rem; color: #94a3b8; margin-bottom: 0.75rem; }
+        .plan-prose hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1rem 0; }
     </style>
 </head>
 <body class="text-slate-100 min-h-screen pb-12 font-sans antialiased selection:bg-indigo-500 selection:text-white">
@@ -384,6 +399,60 @@
 
     </div>
 
+    <!-- PLAN DETAILS MODAL -->
+    <div id="planModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/75 backdrop-blur-md p-4 transition-all duration-300">
+        <div class="glass-card bg-slate-900/95 border border-white/10 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-slate-800/40">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="p-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl shrink-0">
+                        <i data-lucide="file-text" class="w-5 h-5"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <h2 id="modalPlanTitle" class="text-base font-bold text-white truncate">Plan Title</h2>
+                        <div class="flex items-center gap-2 text-xs text-slate-400 truncate">
+                            <span id="modalPlanWorkspace" class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700">Workspace</span>
+                            <span id="modalPlanDate">Date</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="modalCopyPathBtn" onclick="copyModalPlanPath()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-white/10 transition">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        <span>Copy Path</span>
+                    </button>
+                    <button onclick="closePlanModal()" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Sub-bar: Tasks Progress -->
+            <div class="px-6 py-3 bg-slate-950/40 border-b border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-3">
+                    <span id="modalPlanStatusBadge"></span>
+                    <span id="modalPlanProgressText" class="text-slate-300 font-medium">0/0 Tasks</span>
+                </div>
+                <div class="w-48 bg-slate-800 h-2 rounded-full overflow-hidden border border-white/5">
+                    <div id="modalPlanProgressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Modal Content (Scrollable Markdown Viewer) -->
+            <div class="px-6 py-5 overflow-y-auto flex-1 text-slate-300 text-sm leading-relaxed plan-prose" id="modalPlanBody">
+                <!-- Rendered Markdown will go here -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-6 py-3 border-t border-white/10 bg-slate-900/60 flex items-center justify-between text-xs text-slate-400">
+                <span id="modalPlanPath" class="truncate max-w-xl font-mono text-[11px] text-slate-500">/path/to/plan.md</span>
+                <button onclick="closePlanModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl transition">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- SCRIPT FOR FETCH & CHARTS -->
     <script>
         let rawMetrics = null;
@@ -466,6 +535,8 @@
             modelSelect.value = currModel;
         }
 
+        let currentModalPlan = null;
+
         function applyFilters() {
             renderAll();
         }
@@ -482,14 +553,133 @@
             });
         }
 
+        function computeDynamicMetrics(filteredSessions) {
+            const agentStatsMap = {};
+            let totalTokens = 0;
+            let totalCost = 0;
+            let ideationTokens = 0;
+            let executionTokens = 0;
+
+            const ideationAgents = new Set(["architect", "explorer", "explore", "librarian", "plan"]);
+            const executionAgents = new Set(["worker", "build"]);
+
+            const dailyMap = {};
+
+            filteredSessions.forEach(s => {
+                const rawAgent = s.agent || "unknown";
+                const agent = (rawAgent.startsWith("@") ? rawAgent.slice(1) : rawAgent).toLowerCase();
+
+                if (!agentStatsMap[agent]) {
+                    agentStatsMap[agent] = {
+                        agent: agent,
+                        invocation_count: 0,
+                        share_pct: 0,
+                        tokens_total: 0,
+                        cost: 0,
+                        avg_cost: 0,
+                        avg_steps: 0,
+                        p95_steps: 0,
+                        breach_count: 0,
+                        breach_rate: 0,
+                        total_tool_calls: 0,
+                        error_tool_calls: 0,
+                        error_rate: 0,
+                        step_ceiling: 10,
+                        steps_list: []
+                    };
+                }
+
+                const st = agentStatsMap[agent];
+                st.invocation_count++;
+                
+                const sTokens = (s.tokens_input || 0) + (s.tokens_output || 0) + (s.tokens_reasoning || 0) + (s.tokens_cache_read || 0) + (s.tokens_cache_write || 0);
+                st.tokens_total += sTokens;
+                totalTokens += sTokens;
+
+                st.cost += (s.cost || 0);
+                totalCost += (s.cost || 0);
+
+                st.steps_list.push(s.step_count || 0);
+
+                if ((s.step_count || 0) >= st.step_ceiling) {
+                    st.breach_count++;
+                }
+
+                const tCalls = s.tool_calls || [];
+                st.total_tool_calls += tCalls.length;
+                tCalls.forEach(tc => {
+                    if (tc.status === "error" || tc.status === "failed" || tc.error) {
+                        st.error_tool_calls++;
+                    }
+                });
+
+                if (ideationAgents.has(agent)) {
+                    ideationTokens += sTokens;
+                } else if (executionAgents.has(agent)) {
+                    executionTokens += sTokens;
+                }
+
+                // Daily grouping
+                if (s.time_created) {
+                    const dt = new Date(s.time_created);
+                    const dayKey = dt.toISOString().slice(0, 10);
+                    if (!dailyMap[dayKey]) {
+                        dailyMap[dayKey] = { time_key: dayKey, session_count: 0, tokens_total: 0 };
+                    }
+                    dailyMap[dayKey].session_count++;
+                    dailyMap[dayKey].tokens_total += sTokens;
+                }
+            });
+
+            const totalSessions = filteredSessions.length;
+            Object.values(agentStatsMap).forEach(st => {
+                st.share_pct = totalSessions > 0 ? Number(((st.invocation_count / totalSessions) * 100).toFixed(1)) : 0;
+                st.avg_cost = st.invocation_count > 0 ? (st.cost / st.invocation_count) : 0;
+                st.avg_steps = st.steps_list.length > 0 ? Number((st.steps_list.reduce((a, b) => a + b, 0) / st.steps_list.length).toFixed(1)) : 0;
+                
+                const sortedSteps = [...st.steps_list].sort((a, b) => a - b);
+                const p95Idx = Math.floor(sortedSteps.length * 0.95);
+                st.p95_steps = sortedSteps.length > 0 ? sortedSteps[p95Idx] : 0;
+
+                st.breach_rate = st.invocation_count > 0 ? Number(((st.breach_count / st.invocation_count) * 100).toFixed(1)) : 0;
+                st.error_rate = st.total_tool_calls > 0 ? Number(((st.error_tool_calls / st.total_tool_calls) * 100).toFixed(1)) : 0;
+            });
+
+            const ier = executionTokens > 0 ? (ideationTokens / executionTokens) : (ideationTokens > 0 ? 9.99 : 1.0);
+            
+            const dailyList = Object.keys(dailyMap).sort().map(k => dailyMap[k]);
+
+            return {
+                agent_distribution: agentStatsMap,
+                ideation_vs_execution_ratio: ier,
+                total_sessions: totalSessions,
+                total_tokens: totalTokens,
+                total_cost: totalCost,
+                time_series_daily: dailyList
+            };
+        }
+
+        function filterPlansByWorkspace(plans) {
+            const proj = document.getElementById('projectFilter').value;
+            if (proj === 'ALL') return plans;
+            return plans.filter(p => {
+                if (p.workspace) {
+                    return p.workspace === proj || p.path.includes(proj);
+                }
+                return p.path.includes(proj);
+            });
+        }
+
         function renderAll() {
             if (!rawMetrics) return;
             const filteredSessions = filterSessions();
+            const dynamicMetrics = computeDynamicMetrics(filteredSessions);
+            const filteredPlans = filterPlansByWorkspace(rawPlans);
 
-            updateKPIs(rawMetrics, filteredSessions);
-            updateAgentDrilldownTable(rawMetrics);
-            updateCharts(rawMetrics);
-            updatePlansTable(rawPlans);
+            updateKPIs(dynamicMetrics, filteredSessions, filteredPlans);
+            updateAgentDrilldownTable(dynamicMetrics);
+            updateCharts(dynamicMetrics);
+            updatePlansTable(filteredPlans);
             updateSessionsTable(filteredSessions);
 
             if (window.lucide) {
@@ -497,18 +687,15 @@
             }
         }
 
-        function updateKPIs(m, filteredSessions) {
+        function updateKPIs(m, filteredSessions, plans) {
             const totalSessions = filteredSessions.length;
             document.getElementById('kpiTotalSessions').innerText = totalSessions;
             
             const totalCalls = filteredSessions.length;
             document.getElementById('kpiTotalDelegations').innerText = totalCalls;
 
-            const totalTokens = filteredSessions.reduce((acc, s) => acc + s.tokens_input + s.tokens_output + s.tokens_reasoning + s.tokens_cache_read + s.tokens_cache_write, 0);
-            document.getElementById('kpiTotalTokens').innerText = formatNumber(totalTokens);
-
-            const totalCost = filteredSessions.reduce((acc, s) => acc + s.cost, 0);
-            document.getElementById('kpiTotalCost').innerText = '$' + totalCost.toFixed(4);
+            document.getElementById('kpiTotalTokens').innerText = formatNumber(m.total_tokens);
+            document.getElementById('kpiTotalCost').innerText = '$' + m.total_cost.toFixed(4);
 
             const ier = m.ideation_vs_execution_ratio.toFixed(2);
             document.getElementById('kpiIER').innerText = ier;
@@ -525,9 +712,16 @@
                 badge.className = 'px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20';
             }
 
-            const pcr = m.plan_completion_rate.toFixed(1) + '%';
+            let completedTasks = 0;
+            let totalTasks = 0;
+            plans.forEach(p => {
+                completedTasks += (p.completed_tasks || 0);
+                totalTasks += (p.total_tasks || 0);
+            });
+            const pcrVal = totalTasks > 0 ? ((completedTasks / totalTasks) * 100) : 0;
+            const pcr = pcrVal.toFixed(1) + '%';
             document.getElementById('kpiPCR').innerText = pcr;
-            document.getElementById('pcrProgressBar').style.width = m.plan_completion_rate + '%';
+            document.getElementById('pcrProgressBar').style.width = pcrVal + '%';
         }
 
         function updateAgentDrilldownTable(m) {
@@ -536,7 +730,7 @@
             const tbody = document.getElementById('agentDrilldownBody');
 
             if (!agents || agents.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-500">No agent metrics available</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-500">No agent metrics available for selected filters</td></tr>';
                 return;
             }
 
@@ -591,8 +785,8 @@
                 data: {
                     labels: agents.map(a => '@' + a),
                     datasets: [{
-                        data: calls,
-                        backgroundColor: colorPalette.slice(0, agents.length),
+                        data: calls.length > 0 ? calls : [1],
+                        backgroundColor: calls.length > 0 ? colorPalette.slice(0, agents.length) : ['#334155'],
                         borderWidth: 2,
                         borderColor: '#0f172a'
                     }]
@@ -746,7 +940,7 @@
 
             if (!plans || plans.length === 0) {
                 badge.innerText = '0 Plans';
-                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-500">No plan files found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-500">No plan files found for this workspace</td></tr>';
                 return;
             }
 
@@ -772,9 +966,10 @@
             }
 
             tbody.innerHTML = visiblePlans.map((p, idx) => {
-                const comp = p.completed_tasks;
-                const tot = p.total_tasks;
-                const rate = p.completion_rate.toFixed(0);
+                const comp = p.completed_tasks || 0;
+                const tot = p.total_tasks || 0;
+                const rate = p.completion_rate ? p.completion_rate.toFixed(0) : 0;
+                const wsBadge = p.workspace ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-normal border border-slate-700/60 truncate max-w-[140px] inline-block" title="${p.workspace}">${p.workspace.split('/').pop()}</span>` : '';
 
                 let statusBadge = '';
                 if (tot === 0) {
@@ -786,10 +981,13 @@
                 }
 
                 return `
-                    <tr class="hover:bg-slate-800/40 transition">
-                        <td class="p-3.5 font-medium text-white break-words min-w-[200px] flex items-center gap-2" title="${p.filename.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
-                            <i data-lucide="file-text" class="w-4 h-4 text-slate-400 shrink-0"></i>
-                            ${p.filename}
+                    <tr class="hover:bg-slate-800/40 transition group">
+                        <td class="p-3.5 font-medium text-white break-words min-w-[220px]">
+                            <div class="flex items-center gap-2 cursor-pointer hover:text-indigo-300 transition" onclick="openPlanModal(${idx})">
+                                <i data-lucide="file-text" class="w-4 h-4 text-indigo-400 shrink-0"></i>
+                                <span class="truncate underline decoration-indigo-500/40 hover:decoration-indigo-400" title="${p.filename.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">${p.filename}</span>
+                                ${wsBadge}
+                            </div>
                         </td>
                         <td class="p-3.5 text-slate-400 text-xs tabular-nums whitespace-nowrap">${p.date_str || '—'}</td>
                         <td class="p-3.5 w-32">
@@ -799,15 +997,90 @@
                         </td>
                         <td class="p-3.5 text-slate-300 tabular-nums">${comp}/${tot} (${rate}%)</td>
                         <td class="p-3.5">${statusBadge}</td>
-                        <td class="p-3.5">
-                            <button onclick="deletePlanAt(${idx})" class="p-1 rounded-lg hover:bg-slate-800 text-rose-400 hover:text-rose-300 transition cursor-pointer" title="Delete plan file">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <td class="p-3.5 flex items-center gap-1">
+                            <button onclick="openPlanModal(${idx})" class="p-1.5 rounded-lg hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 transition cursor-pointer" title="View plan content">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="deletePlanAt(${idx})" class="p-1.5 rounded-lg hover:bg-slate-800 text-rose-400 hover:text-rose-300 transition cursor-pointer" title="Delete plan file">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </td>
                     </tr>
                 `;
             }).join('');
         }
+
+        function openPlanModal(idx) {
+            const p = visiblePlans[idx];
+            if (!p) return;
+
+            currentModalPlan = p;
+            document.getElementById('modalPlanTitle').innerText = p.filename;
+            document.getElementById('modalPlanWorkspace').innerText = p.workspace || 'Global (~/.opencode/plans)';
+            document.getElementById('modalPlanDate').innerText = p.date_str || 'No date';
+            document.getElementById('modalPlanPath').innerText = p.path;
+
+            const comp = p.completed_tasks || 0;
+            const tot = p.total_tasks || 0;
+            const rate = p.completion_rate ? p.completion_rate.toFixed(0) : 0;
+            document.getElementById('modalPlanProgressText').innerText = `${comp}/${tot} Tasks Completed (${rate}%)`;
+            document.getElementById('modalPlanProgressBar').style.width = rate + '%';
+
+            let statusBadge = '';
+            if (tot === 0) {
+                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20"><i data-lucide="minus-circle" class="w-3 h-3 text-slate-400"></i> No tasks</span>';
+            } else if (comp === tot) {
+                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"><i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-400"></i> Completed</span>';
+            } else {
+                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> In Progress</span>';
+            }
+            document.getElementById('modalPlanStatusBadge').innerHTML = statusBadge;
+
+            // Render Markdown
+            const bodyEl = document.getElementById('modalPlanBody');
+            if (p.content && window.marked) {
+                bodyEl.innerHTML = marked.parse(p.content);
+            } else if (p.content) {
+                bodyEl.innerHTML = `<pre class="whitespace-pre-wrap">${p.content}</pre>`;
+            } else {
+                bodyEl.innerHTML = `<p class="text-slate-500 italic">No content available in this plan file.</p>`;
+            }
+
+            const modal = document.getElementById('planModal');
+            modal.classList.remove('hidden');
+
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        function closePlanModal() {
+            const modal = document.getElementById('planModal');
+            modal.classList.add('hidden');
+            currentModalPlan = null;
+        }
+
+        function copyModalPlanPath() {
+            if (!currentModalPlan || !currentModalPlan.path) return;
+            navigator.clipboard.writeText(currentModalPlan.path).then(() => {
+                const btn = document.getElementById('modalCopyPathBtn');
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i> Copied!';
+                if (window.lucide) lucide.createIcons();
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    if (window.lucide) lucide.createIcons();
+                }, 2000);
+            }).catch(err => alert("Copy failed: " + err));
+        }
+
+        // Close modal on Escape key or outside click
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closePlanModal();
+        });
+        document.getElementById('planModal').addEventListener('click', (e) => {
+            if (e.target.id === 'planModal') closePlanModal();
+        });
 
         async function deletePlanAt(idx) {
             const p = visiblePlans[idx];
@@ -821,6 +1094,9 @@
                 if (!res.ok) {
                     alert('Error deleting plan: ' + (body.error || 'Server error'));
                     return;
+                }
+                if (currentModalPlan && currentModalPlan.path === p.path) {
+                    closePlanModal();
                 }
                 await fetchData();
             } catch (err) {

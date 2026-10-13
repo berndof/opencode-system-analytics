@@ -47,6 +47,9 @@ case "${MODE}" in
     cli|terminal)
         exec python3 -m orchestrator_analytics.cli "${@:2}"
         ;;
+    alerts)
+        exec python3 -m orchestrator_analytics.cli alerts "${@:2}"
+        ;;
     status)
         if pgrep -f "orchestrator_analytics.server" > /dev/null 2>&1; then
             echo "OpenCode System Analytics server is running on http://localhost:8765"
@@ -86,11 +89,12 @@ case "${MODE}" in
         echo "  ./launch.sh restart       Restart web server"
         echo "  ./launch.sh status        Check running status of web server"
         echo "  ./launch.sh cli           Render ANSI CLI terminal dashboard report"
+        echo "  ./launch.sh alerts        Render only active actionable findings and suggestions"
         echo "  ./launch.sh web           Start web server in foreground"
         ;;
     *)
         echo "Unknown mode: ${MODE}"
-        echo "Usage: ./launch.sh [start|stop|restart|status|cli|web]"
+        echo "Usage: ./launch.sh [start|stop|restart|status|cli|alerts|web]"
         exit 1
         ;;
 esac

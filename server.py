@@ -31,7 +31,22 @@ def delete_plan_file(plan_path: str) -> tuple:
     if not real.lower().endswith('.md'):
         return False, {"error": "forbidden"}, 403
         
+    collector = AnalyticsCollector()
+    conn = collector.connect_db()
+    known_ws = []
+    if conn:
+        try:
+            sessions_dict = collector.extract_sessions(conn)
+            known_ws = list({s.project for s in sessions_dict.values() if s.project and s.project != "default"})
+        finally:
+            conn.close()
+
     allowed_dirs = {os.path.realpath(d) for d in PLANS_DIRS}
+    for ws in known_ws:
+        if ws:
+            allowed_dirs.add(os.path.realpath(os.path.join(ws, ".opencode", "plans")))
+            allowed_dirs.add(os.path.realpath(os.path.join(ws, "docs", "plans")))
+
     parent_dir = os.path.realpath(os.path.dirname(real))
     if parent_dir not in allowed_dirs:
         return False, {"error": "forbidden"}, 403
@@ -64,8 +79,8 @@ def get_agents_data() -> list:
 
 def get_plans_data() -> list:
     collector = AnalyticsCollector()
-    plans = collector.get_plans()
-    return [p.to_dict() for p in plans]
+    engine = AnalyticsEngine(collector=collector)
+    return [p.to_dict() for p in engine.data.plans]
 
 def get_sessions_data() -> list:
     collector = AnalyticsCollector()

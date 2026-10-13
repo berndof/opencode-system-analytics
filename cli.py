@@ -47,7 +47,10 @@ def render_cli_dashboard():
     kpis: KPIRecord = engine.compute_all()
 
     agent_stats = kpis.agent_distribution
-    total_delegations = sum(s.invocation_count for s in agent_stats.values())
+    routing_data = kpis.routing_breakdown or {}
+    # Real delegations are counted from dispatch tool calls, not from the number
+    # of agent sessions (which is what this used to print, mislabeled).
+    total_delegations = routing_data.get("total_dispatches", 0)
 
     print(f"\n{BOLD}{CYAN}╔═════════════════════════════════════════════════════════════════════════════════════════════╗{RESET}")
     print(f"{BOLD}{CYAN}║                             OPENCODE SYSTEM ANALYTICS DASHBOARD                             ║{RESET}")
@@ -55,8 +58,9 @@ def render_cli_dashboard():
 
     # 1. OVERALL STATS
     print(f"{BOLD}{MAGENTA}── OVERALL TELEMETRY STATS ───────────────────────────────────────────────────────────────────{RESET}")
-    print(f"  • Total Sessions:         {BOLD}{kpis.total_sessions}{RESET}")
-    print(f"  • Subagent Delegations:   {BOLD}{total_delegations}{RESET}")
+    print(f"  • Agent Sessions:         {BOLD}{kpis.total_sessions}{RESET}")
+    print(f"  • Subagent Delegations:   {BOLD}{total_delegations}{RESET} "
+          f"(failed: {routing_data.get('failed_dispatches', 0)})")
     print(f"  • Total Token Consumption:{BOLD} {format_tokens(kpis.total_tokens)}{RESET} ({kpis.total_tokens:,} tokens)")
     print(f"  • Estimated Cost:         {BOLD}${kpis.total_cost:.4f} USD{RESET}")
     print(f"  • Workspace Plans Tracked: {BOLD}{kpis.pcr_breakdown.get('total_plans', 0)}{RESET}\n")
@@ -111,7 +115,70 @@ def render_cli_dashboard():
                 print(f"      {DIM}... and {len(plan['tasks']) - 3} more tasks{RESET}")
     print()
 
-    # 5. OPTIMIZATION RECOMMENDATIONS
+    # 4.5 ROUTING BREAKDOWN (E1)
+    routing = kpis.routing_breakdown or {}
+    print(f"{BOLD}{MAGENTA}── ROUTING BREAKDOWN ────────────────────────────────────────────────────────────────────{RESET}")
+    if routing:
+        rc = routing.get("route_classes", {})
+        total_dispatches = routing.get("total_dispatches", 0)
+        print(f"  • Delegations detected:        {BOLD}{total_dispatches}{RESET} "
+              f"(failed: {routing.get('failed_dispatches', 0)})")
+        print(f"  • Session routes:              "
+              f"solo {rc.get('solo', 0)} | specialist {GREEN}{rc.get('specialist', 0)}{RESET} | "
+              f"heavy {YELLOW}{rc.get('heavy', 0)}{RESET} | mixed {YELLOW}{rc.get('mixed', 0)}{RESET}")
+        heavy_share = routing.get("heavy_route_cost_share_pct", 0.0)
+        heavy_color = RED if heavy_share > 90 else (YELLOW if heavy_share > 50 else GREEN)
+        print(f"  • Cost on heavy route:         {heavy_color}{heavy_share:.1f}%{RESET} "
+              f"(${routing.get('heavy_route_cost', 0):.4f})")
+        targets = routing.get("dispatch_targets", {})
+        if targets:
+            rendered = ", ".join(f"@{k}={v}" for k, v in list(targets.items())[:8])
+            print(f"  • Dispatch targets:            {rendered}")
+        unknown = routing.get("unknown_dispatch_targets", [])
+        if unknown:
+            print(f"  {RED}• Unknown targets (not in roster): {', '.join(unknown)}{RESET}")
+    else:
+        print(f"  {DIM}No routing data{RESET}")
+    print()
+
+    # 4.6 BREACH ROOT CAUSES (E1)
+    breach = kpis.breach_causes or {}
+    print(f"{BOLD}{MAGENTA}── STEP-CEILING BREACH ROOT CAUSES ───────────────────────────────────────────────────{RESET}")
+    if breach and breach.get("total_breaches", 0) > 0:
+        causes = breach.get("cause_distribution", {})
+        labels = {
+            "no_output": "recon without edits",
+            "unexplained": "no data-backed cause",
+            "tool_loop": "one tool repeated",
+            "tool_errors": "tool errors",
+            "over_delegation": "over-delegation",
+            "failed_dispatch": "failed dispatch",
+        }
+        for cause, count in causes.items():
+            color = RED if cause in ("unexplained", "tool_loop") else YELLOW
+            print(f"  • {color}{labels.get(cause, cause):<24}{RESET} {count}")
+        by_agent = breach.get("breaches_by_agent", {})
+        if by_agent:
+            rendered = ", ".join(f"@{k}={v}" for k, v in list(by_agent.items())[:6])
+            print(f"  • Breaching agents:            {rendered}")
+    else:
+        print(f"  {GREEN}No step-ceiling breaches.{RESET}")
+    print()
+
+    # 5. ALERTS (E2) — actionable findings with suggestions
+    print(f"{BOLD}{MAGENTA}── ALERTS ─────────────────────────────────────────────────────────────────────────────{RESET}")
+    alerts = kpis.alerts or []
+    if alerts:
+        for a in alerts:
+            color = RED if a.severity == "critical" else (YELLOW if a.severity == "warn" else BLUE)
+            print(f"  {color}[{a.severity.upper()}]{RESET} {a.title}")
+            print(f"      {DIM}{a.detail}{RESET}")
+            print(f"      {GREEN}=>{RESET} {a.suggestion}")
+            print()
+    else:
+        print(f"  {GREEN}✅ No alerts: every threshold is within bounds.{RESET}\n")
+
+    # 6. OPTIMIZATION RECOMMENDATIONS
     print(f"{BOLD}{MAGENTA}── OPTIMIZATION RECOMMENDATIONS ──────────────────────────────────────────────────────────────{RESET}")
     recs = []
 
@@ -120,7 +187,7 @@ def render_cli_dashboard():
     elif ier < 0.5:
         recs.append(f"{BLUE}ℹ️  Low ideation ratio (IER = {ier:.2f} < 0.5). Consider using @architect or @explorer before implementation.{RESET}")
     else:
-        recs.append(f"{GREEN}✅ Ideation vs Execution ratio is optimal (IER = {ier:.2f}).{RESET}")
+        recs.append(f"{GREEN}✅ Ideation vs Execution ratio is optimal (IER = {ier:.2f}, coverage {kpis.ier_breakdown.get('coverage_pct', 0):.0f}%).{RESET}")
 
     if pcr < 50.0 and kpis.pcr_breakdown.get("total_tasks", 0) > 0:
         recs.append(f"{YELLOW}⚠️  Plan completion rate is low ({pcr:.1f}%). Ensure completed tasks are marked with [x] in plan files.{RESET}")
@@ -135,5 +202,25 @@ def render_cli_dashboard():
         print(f"  {rec}")
     print(f"\n{BOLD}{CYAN}═════════════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
+def render_alerts_only():
+    collector = AnalyticsCollector()
+    engine = AnalyticsEngine(collector=collector)
+    kpis: KPIRecord = engine.compute_all()
+    alerts = kpis.alerts or []
+
+    print(f"\n{BOLD}{CYAN}── ACTIVE ALERTS ({len(alerts)}) ──────────────────────────────────────────────────────────{RESET}\n")
+    if alerts:
+        for a in alerts:
+            color = RED if a.severity == "critical" else (YELLOW if a.severity == "warn" else BLUE)
+            print(f"  {color}[{a.severity.upper()}]{RESET} {a.title}")
+            print(f"      {DIM}{a.detail}{RESET}")
+            print(f"      {GREEN}=>{RESET} {a.suggestion}")
+            print()
+    else:
+        print(f"  {GREEN}✅ No alerts: every threshold is within bounds.{RESET}\n")
+
 if __name__ == "__main__":
-    render_cli_dashboard()
+    if len(sys.argv) > 1 and sys.argv[1] == "alerts":
+        render_alerts_only()
+    else:
+        render_cli_dashboard()
